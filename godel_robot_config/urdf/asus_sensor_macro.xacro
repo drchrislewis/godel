@@ -1,6 +1,8 @@
 <?xml version="1.0" ?>
 <robot name="asus_sensor" xmlns:xacro="http://ros.org/wiki/xacro">
 
+	<xacro:include filename="$(find godel_robot_config)/urdf/calibration_transform.xacro"/>
+
 	<xacro:property name="asus_length" value="0.220"/>
 	<xacro:property name="asus_width" value="0.040"/>
 	<xacro:property name="asus_height" value="0.040"/>
@@ -91,6 +93,10 @@
 			<child link="${prefix}asus_link"/>
 			<origin xyz="${x_val} ${y_val} ${z_val}" rpy="${roll} ${pitch} ${yaw}"/>
 		</joint>
+
+                             <!-- Replace the fixed joint destined for calibration by the calibration definition -->
+		<xacro:macro name="calibration_definition" params="${prefix}asus_link ${parent_link} ${x_val} ${y_val} ${z_val} ${roll} ${pitch} ${yaw}">
+	
 		<!-- end of world joints -->
 
 	</xacro:macro>
