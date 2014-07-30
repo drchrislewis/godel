@@ -1,6 +1,24 @@
-asus_link_x_joint: 0.0
-asus_link_y_joint: 0.0
-asus_link_z_joint: 0.0
-asus_link_yaw_joint: 0.0
-asus_link_pitch_joint: 0.0
-asus_link_roll_joint: 0.0
+true
+---
+This is a simple list of mutable joint states
+---
+true
+---
+each line has the form
+---
+true
+---
+"joint_name: <double_value>"
+---
+asus_link_pitch_joint: 0.0273903078749682
+asus_link_roll_joint: -3.12303174387441
+asus_link_x_joint: 0.0147966487200732
+asus_link_y_joint: 0.00674164266564195
+asus_link_yaw_joint: 0.0016176744478687
+asus_link_z_joint: 0.00716265763867154
+zcirclegrid7x5_pitch_joint: 0.00165601516465649
+zcirclegrid7x5_roll_joint: -0.0139451297613672
+zcirclegrid7x5_x_joint: 0.936263093793525
+zcirclegrid7x5_y_joint: -0.0128522857514721
+zcirclegrid7x5_yaw_joint: -3.13020446894628
+zcirclegrid7x5_z_joint: 0.00577573447153429

@@ -37,17 +37,28 @@
     </include>
   </group>
 
+
+  <!-- joint state publisher which combines the mutable and the real joint states for the scene -->
+  <node name="combined_joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" >
+        <rosparam param="source_list">[motoman_joint_states, mutable_joint_states]</rosparam>
+        <param name="publish_default_velocities" value="true" />
+        <param name="publish_default_efforts" value="true" />
+        <param name="publish_default_positions" value="true" />
+  </node>
+
+
   <!-- publish the robot state (tf transforms) -->
-  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
-  <group ns="calibrated">
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" >
+
+   </node>
+
+
   <!-- publish the joint states associated with transforms that might be calibrated-->
-		<node name="mutable_joint_state_publisher" pkg="industrial_extrinsic_cal" type="mutable_joint_state_publisher" output="screen">
-			<param name="mutableJointStateYamlFile" value="$(find godel_sia20d_cal_moveit_config)/config/godel_mutable_joints.yaml" />
-		 </node>
-  	 <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" >
-        <remap from="joint_states" to="/mutable_joint_states"/>
-     </node>
-   </group>
+    <node name="mutable_joint_state_publisher" pkg="industrial_extrinsic_cal" type="mutable_joint_state_publisher" output="screen">
+             <param name="mutableJointStateYamlFile" value="$(find godel_sia20d_cal_moveit_config)/config/godel_mutable_joints.yaml" />
+             <remap from="joint_states" to="/mutable_joint_states"/>
+    </node>
+    <!--node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" -->
 
   <include file="$(find godel_sia20d_cal_moveit_config)/launch/move_group.launch">
     <arg name="publish_monitored_planning_scene" value="true" />
@@ -58,6 +69,11 @@
   </include>
   
   <include file="$(find godel_sia20d_cal_moveit_config)/launch/default_warehouse_db.launch" />
+
+  <!-- Define location of printed target relative to world -->
+  <node pkg="tf" type="static_transform_publisher" 
+                 name="target_frame" 
+                 args="0.7 -0.12 0.0 0.0 0.0 0.0 world_frame target_frame 100" /> 
 
 </launch>
 

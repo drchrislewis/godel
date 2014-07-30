@@ -27,6 +27,18 @@
 		</collision>	
 	</link>
 
+                   <link name="zcirclegrid7x5">
+                          <visual>
+                                <geometry>
+                                    <mesh filename="package://godel_robot_config/meshes/circlegrid_wcolor.dae" />
+                                </geometry>
+                           </visual>
+                           <collision>
+                                   <geometry>
+                                          <box size=".001 .001 .001" />
+                                  </geometry>
+                            </collision>
+	</link>
 
 	<!-- instantiating sensor definitions -->
 	<xacro:sensor_definitions prefix="${arm_prefix}" parent_link="${arm_prefix}base_link" 
@@ -43,7 +55,15 @@
 		<origin xyz="0 ${coupler_height} 0" rpy="0.0 0.0 0.0"/>
 	</joint>
 
-
+	
+	<!-- REPLACE WITH A CALIBRATABLE TRANSFORM -->
+	<!-- joint name="ref2target" type="fixed">
+		<parent link="world_frame"/>
+		<child link="circlegrid7x5"/>
+		<origin xyz="0.85 -0.2 0.0" rpy="0.0 0.0 3.1415"/>
+	</joint-->
+	<xacro:include filename="$(find godel_robot_config)/urdf/calibration_transform.xacro"/>
+	<xacro:calibration_definitions child_link="zcirclegrid7x5" parent_link="world_frame" />
 
 	<!-- start of arm-workcell joint definitions -->
 	<joint name="world_to_base" type="fixed">
