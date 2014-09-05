@@ -20,27 +20,29 @@
     <arg name="load_robot_description" value="true" />
   </include>
 
+  <group ns="motoman">
+		<!-- run the robot simulator and action interface nodes -->
+    <remap from="/motoman/joint_trajectory_action" to="/joint_trajectory_action"/>
+		<group if="$(arg sim)">
+		  <include file="$(find industrial_robot_simulator)/launch/robot_interface_simulator.launch" />
+			<rosparam param="initial_joint_state">[-1.34, 1.008, 0.033, -1.168, 0.106, -0.837, 2.430]</rosparam>
+		</group>
 
-  <!-- run the robot simulator and action interface nodes -->
-  <group if="$(arg sim)">
-    <include file="$(find industrial_robot_simulator)/launch/robot_interface_simulator.launch" />
-		<rosparam param="initial_joint_state">[-1.34, 1.008, 0.033, -1.168, 0.106, -0.837, 2.430]</rosparam>
-  </group>
-
-  <!-- run the "real robot" interface nodes -->
-  <!--   - this typically includes: robot_state, motion_interface, and joint_trajectory_action nodes -->
-  <!--   - replace these calls with appropriate robot-specific calls or launch files -->
-  <group unless="$(arg sim)">
-    <include file="$(find motoman_sia20d_support)/launch/robot_interface_streaming_sia20d.launch" >
-      <arg name="robot_ip" value="$(arg robot_ip)"/>
-      <arg name="controller" value="$(arg controller)"/>
-    </include>
+		<!-- run the "real robot" interface nodes -->
+		<!--   - this typically includes: robot_state, motion_interface, and joint_trajectory_action nodes -->
+		<!--   - replace these calls with appropriate robot-specific calls or launch files -->
+		<group unless="$(arg sim)">
+		  <include file="$(find motoman_sia20d_support)/launch/robot_interface_streaming_sia20d.launch" >
+		    <arg name="robot_ip" value="$(arg robot_ip)"/>
+		    <arg name="controller" value="$(arg controller)"/>
+		  </include>
+		</group>
   </group>
 
 
   <!-- joint state publisher which combines the mutable and the real joint states for the scene -->
   <node name="combined_joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" >
-        <rosparam param="source_list">[motoman_joint_states, mutable_joint_states]</rosparam>
+        <rosparam param="source_list">[motoman/joint_states, mutable_joint_states]</rosparam>
         <param name="publish_default_velocities" value="true" />
         <param name="publish_default_efforts" value="true" />
         <param name="publish_default_positions" value="true" />
