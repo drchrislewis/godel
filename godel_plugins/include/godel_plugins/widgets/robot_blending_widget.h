@@ -1,17 +1,17 @@
 /*
-	Copyright Mar 13, 2014 Southwest Research Institute
+        Copyright Mar 13, 2014 Southwest Research Institute
 
-	Licensed under the Apache License, Version 2.0 (the "License");
-	you may not use this file except in compliance with the License.
-	You may obtain a copy of the License at
+        Licensed under the Apache License, Version 2.0 (the "License");
+        you may not use this file except in compliance with the License.
+        You may obtain a copy of the License at
 
-		http://www.apache.org/licenses/LICENSE-2.0
+                http://www.apache.org/licenses/LICENSE-2.0
 
-	Unless required by applicable law or agreed to in writing, software
-	distributed under the License is distributed on an "AS IS" BASIS,
-	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-	See the License for the specific language governing permissions and
-	limitations under the License.
+        Unless required by applicable law or agreed to in writing, software
+        distributed under the License is distributed on an "AS IS" BASIS,
+        WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+        See the License for the specific language governing permissions and
+        limitations under the License.
 */
 
 #ifndef ROBOT_BLENDING_WIDGET_H_
@@ -20,18 +20,23 @@
 #include <godel_msgs/SurfaceDetection.h>
 #include <godel_msgs/SelectSurface.h>
 #include <godel_msgs/SelectedSurfacesChanged.h>
-#include <tf/transform_datatypes.h>
+#include <godel_msgs/SurfaceBlendingParameters.h>
+#include <godel_msgs/BlendingPlanParameters.h>
+#include <godel_msgs/ScanPlanParameters.h>
+#include <godel_msgs/ProcessPlanning.h>
+
 #include <ros/ros.h>
-#include <geometry_msgs/Pose.h>
 
 #include <ui_robot_blending_plugin.h>
-#include <ui_robot_scan_configuration.h>
-#include <ui_pose_widget.h>
-#include <ui_surface_detection_configuration.h>
+
 #include <QWidget>
 #include <QTimer>
 #include <QtConcurrentRun>
-#include <QMainWindow>
+
+#include <godel_plugins/widgets/surface_detection_configuration.h>
+#include <godel_plugins/widgets/robot_scan_configuration.h>
+#include <godel_plugins/widgets/blend_tool_param_window.h>
+#include <godel_plugins/widgets/scan_tool_configuration_window.h>
 
 // macros
 #ifndef DEG2RAD
@@ -42,186 +47,122 @@
 #define RAD2DEG(x) ((x)*57.29578)
 #endif
 
-
 namespace godel_plugins
 {
-namespace widgets {
+namespace widgets
+{
 
 const std::string SURFACE_DETECTION_SERVICE = "surface_detection";
+const std::string SURFACE_BLENDING_PARAMETERS_SERVICE = "surface_blending_parameters";
 const std::string SELECT_SURFACE_SERVICE = "select_surface";
+const std::string PROCESS_PATH_SERVICE = "process_path";
 const std::string SELECTED_SURFACES_CHANGED_TOPIC = "selected_surfaces_changed";
+const std::string GET_AVAILABLE_MOTION_PLANS_SERVICE = "get_available_motion_plans";
+const std::string SELECT_MOTION_PLAN_SERVICE = "select_motion_plan";
+const std::string LOAD_SAVE_MOTION_PLAN_SERVICE = "load_save_motion_plan";
+const std::string RENAME_SURFACE_SERVICE = "rename_surface";
 
-
-class PoseWidget: public QWidget
+class RobotBlendingWidget : public QWidget
 {
-Q_OBJECT
+  Q_OBJECT
 public:
-	PoseWidget(QWidget *parent = NULL);
+  RobotBlendingWidget(std::string ns = "");
+  virtual ~RobotBlendingWidget();
 
-	void set_values(const geometry_msgs::Pose& p);
-	void set_values(const tf::Transform &t);
-	tf::Transform get_values();
+  std::string get_name() { return "RobotBlending"; }
 
-protected:
+  int width() { return ui_.TabWidget->width(); }
 
-	Ui::PoseWidget ui_;
-};
+  int height() { return ui_.TabWidget->height(); }
 
-class RobotScanConfigWidget: public QMainWindow
-{
-
-private:
-
-Q_OBJECT
-public:
-
-	RobotScanConfigWidget(godel_msgs::RobotScanParameters params);
-	void show();
+  void emit_signal_selection_change() { Q_EMIT selection_changed(); }
 
 Q_SIGNALS:
-	void parameters_changed();
+  void selection_changed();
+  void surface_detection_started();
+  void surface_detection_completed();
+  void connect_started();
+  void connect_completed();
 
 protected:
-
-	void init();
-	void update_parameters();
-	void save_parameters();
+  void init();
+  void send_scan_and_find_request();
+  void send_find_surface_request();
+  void save_robot_scan_parameters();
+  bool call_select_surface_service(godel_msgs::SelectSurface::Request& req);
+  bool call_surface_detection_service(godel_msgs::SurfaceDetection& s);
+  void selected_surface_changed_callback(godel_msgs::SelectedSurfacesChangedConstPtr msg);
+  void select_motion_plan(const std::string& name, bool simulate);
+  void request_available_motions(std::vector<std::string>& plans);
+  void request_load_save_motions(const std::string& path, bool isLoad);
+  void update_motion_plan_list(const std::vector<std::string>& names);
 
 protected Q_SLOTS:
 
-	void accept_changes_handler();
-	void cancel_changes_handler();
+  void scan_button_handler();
+  void find_surface_button_handler();
+  void update_handler();
+  void connect_to_services();
+  void increase_tab_index_handler();
+  void decrease_tab_index_handler();
+  void selection_changed_handler();
+  void select_all_handler();
+  void deselect_all_handler();
+  void hide_all_handler();
+  void show_all_handler();
+  void scan_options_click_handler();
 
-public:
+  void blend_options_click_handler();
+  void scan_plan_options_click_handler();
 
-	godel_msgs::RobotScanParameters robot_scan_parameters_;
+  void surface_options_click_handler();
+  void robot_scan_params_changed_handler();
+  void surface_detect_params_changed_handler();
+  void preview_path_handler();
+  void surface_detection_started_handler();
+  void surface_detection_completed_handler();
+  void connect_started_handler();
+  void connect_completed_handler();
+  void generate_process_path_handler();
+  void request_save_parameters();
 
-protected:
+  void simulate_motion_plan_handler();
+  void execute_motion_plan_handler();
 
-	Ui::RobotScanConfigWindow ui_;
-	PoseWidget *world_to_obj_pose_widget_;
-	PoseWidget *tcp_to_cam_pose_widget_;
-};
+  void save_motion_plan_handler();
+  void load_motion_plan_handler();
 
-class SurfaceDetectionConfigWidget: public QMainWindow
-{
-
-private:
-
-Q_OBJECT
-public:
-
-	SurfaceDetectionConfigWidget(godel_msgs::SurfaceDetectionParameters params);
-	void show();
-
-Q_SIGNALS:
-	void parameters_changed();
-
-protected:
-
-	void init();
-	void update_parameters();
-	void save_parameters();
-
-protected Q_SLOTS:
-
-	void accept_changes_handler();
-	void cancel_changes_handler();
-
-public:
-
-	godel_msgs::SurfaceDetectionParameters surface_detection_parameters_;
+  void handle_surface_rename(QListWidgetItem* item);
 
 protected:
+  Ui::RobotBlendingWidget ui_;
+  RobotScanConfigWidget* robot_scan_config_window_;
+  BlendingPlanConfigWidget* robot_blend_config_window_;
+  SurfaceDetectionConfigWidget* surface_detect_config_window_;
+  ScanPlanConfigWidget* scan_plan_config_window_;
 
-	Ui::SurfaceDetectionConfigWindow ui_;
-};
+  ros::ServiceClient surface_detection_client_;
+  ros::ServiceClient select_surface_client_;
+  ros::ServiceClient process_plan_client_;
+  ros::ServiceClient surface_blending_parameters_client_;
+  ros::ServiceClient get_motion_plans_client_;
+  ros::ServiceClient select_motion_plan_client_;
+  ros::ServiceClient load_save_motion_plan_client_;
+  ros::ServiceClient rename_surface_client_;
+  ros::Subscriber selected_surfaces_subs_;
 
-class RobotBlendingWidget:  public QWidget
-{
-Q_OBJECT
-public:
-	RobotBlendingWidget(std::string ns="");
-	virtual ~RobotBlendingWidget();
+  std::string param_ns_;
+  godel_msgs::RobotScanParameters robot_scan_parameters_;
+  godel_msgs::SurfaceDetectionParameters surf_detect_parameters_;
+  godel_msgs::BlendingPlanParameters blending_plan_parameters_;
+  godel_msgs::ScanPlanParameters scan_plan_parameters_;
+  godel_msgs::SurfaceDetection::Response latest_result_;
+  godel_msgs::SurfaceDetection::Request latest_request_;
+  godel_msgs::SelectedSurfacesChanged selected_surfaces_msg_;
 
-	std::string get_name()
-	{
-		return "RobotBlending";
-	}
-
-	int width()
-	{
-		return ui_.TabWidget->width();
-	}
-
-	int height()
-	{
-		return ui_.TabWidget->height();
-	}
-
-	void emit_signal_selection_change()
-	{
-		Q_EMIT selection_changed();
-	}
-
-Q_SIGNALS:
-	void selection_changed();
-	void surface_detection_started();
-	void surface_detection_completed();
-	void connect_started();
-	void connect_completed();
-
-protected:
-
-	void init();
-	void send_scan_and_find_request();
-	void send_find_surface_request();
-	void save_robot_scan_parameters();
-	bool call_select_surface_service(godel_msgs::SelectSurface::Request &req);
-	bool call_surface_detection_service(godel_msgs::SurfaceDetection& s);
-	void selected_surface_changed_callback(godel_msgs::SelectedSurfacesChangedConstPtr msg);
-
-protected Q_SLOTS:
-
-	void scan_button_handler();
-	void find_surface_button_handler();
-	void update_handler();
-	void connect_to_services();
-	void increase_tab_index_handler();
-	void decrease_tab_index_handler();
-	void selection_changed_handler();
-	void select_all_handler();
-	void deselect_all_handler();
-	void hide_all_handler();
-	void show_all_handler();
-	void scan_options_click_handler();
-	void surface_options_click_handler();
-	void robot_scan_params_changed_handler();
-	void surface_detect_params_changed_handler();
-	void preview_path_handler();
-	void surface_detection_started_handler();
-	void surface_detection_completed_handler();
-	void connect_started_handler();
-	void connect_completed_handler();
-
-protected:
-	Ui::RobotBlendingWidget ui_;
-	RobotScanConfigWidget *robot_scan_config_window_;
-	SurfaceDetectionConfigWidget *surface_detect_config_window_;
-
-	ros::ServiceClient surface_detection_client_;
-	ros::ServiceClient select_surface_client_;
-	ros::Subscriber selected_surfaces_subs_;
-	std::string param_ns_;
-	godel_msgs::RobotScanParameters robot_scan_parameters_;
-	godel_msgs::SurfaceDetectionParameters surf_detect_parameters_;
-	godel_msgs::SurfaceDetection::Response latest_result_;
-	godel_msgs::SurfaceDetection::Request latest_request_;
-	godel_msgs::SelectedSurfacesChanged selected_surfaces_msg_;
-
-	// service results
-	bool surface_detection_op_succeeded_;
-	std::string surface_detection_op_message_;
+  // service results
+  bool surface_detection_op_succeeded_;
+  std::string surface_detection_op_message_;
 };
 
 } /* namespace widgets */
