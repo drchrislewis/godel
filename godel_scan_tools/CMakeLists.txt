@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(background_subtraction)
+project(godel_scan_tools)
 
 ## System dependencies are found with CMake's conventions
  find_package(catkin REQUIRED COMPONENTS 
@@ -78,7 +78,7 @@ catkin_package(
   INCLUDE_DIRS include
   CATKIN_DEPENDS 
      roscpp
-#  LIBRARIES background_subtraction
+#  LIBRARIES godel_scan_tools
 #  DEPENDS system_lib
 )
 
@@ -95,24 +95,24 @@ catkin_package(
 )
 
 ## Declare a cpp library
-# add_library(background_subtraction
-#   src/${PROJECT_NAME}/background_subtraction.cpp
+# add_library(godel_scan_tools
+#   src/${PROJECT_NAME}/godel_scan_tools.cpp
 # )
 
 ## Declare a cpp executable
-# add_executable(background_subtraction_node src/background_subtraction_node.cpp)
-#add_executable(bs_test test/background_subtraction_test.cpp )
-#target_link_libraries(bs_test 
-#   ${catkin_LIBRARIES}
-#)
+ add_executable(region_grown_edges src/nodes/region_grown_edges.cpp)
+#add_executable(bs_test test/godel_scan_tools_test.cpp )
+target_link_libraries(region_grown_edges
+   ${catkin_LIBRARIES}
+)
 
 
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
-# add_dependencies(background_subtraction_node background_subtraction_generate_messages_cpp)
+# add_dependencies(godel_scan_tools_node godel_scan_tools_generate_messages_cpp)
 
 ## Specify libraries to link a library or executable target against
-# target_link_libraries(background_subtraction_node
+# target_link_libraries(godel_scan_tools_node
 #   ${catkin_LIBRARIES}
 # )
 
@@ -131,7 +131,7 @@ catkin_package(
 # )
 
 ## Mark executables and/or libraries for installation
-# install(TARGETS background_subtraction background_subtraction_node
+# install(TARGETS godel_scan_tools godel_scan_tools_node
 #   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 #   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 #   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
@@ -157,7 +157,7 @@ catkin_package(
 
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_background_subtraction.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_godel_scan_tools.cpp)
 #if (CATKIN_ENABLE_TESTING)
    catkin_add_gtest(test_background_subtraction test/background_subtraction_test.cpp )
    target_link_libraries(test_background_subtraction ${catkin_LIBRARIES})

@@ -22,7 +22,7 @@ class background_subtraction{
   /** @brief constructor that sets the background cloud, also initializes the KdTree for searching
       @param bg_cloud the set of points defining the background
   */
-  background_subtraction(pcl::PointCloud<pcl::PointXYZ>::Ptr bg_cloud)
+  background_subtraction(pcl::PointCloud<pcl::PointXYZ>::Ptr bg_cloud, double distance_threshold): distance_threshold_(distance_threshold)
     {
       pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
       bg_cloud_ = cloud;

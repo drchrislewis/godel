@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package>
-  <name>background_subtraction</name>
+  <name>godel_scan_tools</name>
   <version>0.0.0</version>
-  <description>The background_subtraction from point clouds</description>
+  <description>The godel_scan_tools for operating on scanned point cloud and mesh data</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag --> 
   <!-- Example:  -->
@@ -19,7 +19,7 @@
   <!-- Url tags are optional, but mutiple are allowed, one per tag -->
   <!-- Optional attribute type can be: website, bugtracker, or repository -->
   <!-- Example: -->
-  <!-- <url type="website">http://wiki.ros.org/background_subtraction</url> -->
+  <!-- <url type="website">http://wiki.ros.org/godel_scan_tools</url> -->
 
 
   <!-- Author tags are optional, mutiple are allowed, one per tag -->
