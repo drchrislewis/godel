@@ -104,6 +104,8 @@ catkin_package(
 #add_executable(bs_test test/godel_scan_tools_test.cpp )
 target_link_libraries(region_grown_edges
    ${catkin_LIBRARIES}
+   libvtkCommon.so
+   libvtkFiltering.so 
 )
 
 

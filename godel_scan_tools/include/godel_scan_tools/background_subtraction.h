@@ -75,18 +75,21 @@ class background_subtraction{
     @param test_cloud input from which we want the foreground
     @returns the forground points
  */
-  pcl::PointCloud<pcl::PointXYZ> remove_background(pcl::PointCloud<pcl::PointXYZ>::Ptr test_cloud)
+  pcl::PointCloud<pcl::PointXYZ>::Ptr remove_background(pcl::PointCloud<pcl::PointXYZ>::Ptr test_cloud)
     {
-      pcl::PointCloud<pcl::PointXYZ> foreground_cloud;
+      pcl::PointCloud<pcl::PointXYZ>::Ptr foreground_cloud(new pcl::PointCloud<pcl::PointXYZ>());
       
       double rsquared;
       std::vector<int> close_point_idx;
       std::vector<float> close_point_dist;
+      int q=0;
       BOOST_FOREACH(pcl::PointXYZ searchPoint, *test_cloud){
 	if ( kd_tree_.radiusSearch (searchPoint, distance_threshold_, close_point_idx, close_point_dist) == 0 )
 	  {
-	    foreground_cloud.push_back(searchPoint);
+	    //pcl::console::print_highlight ("adding a point %d %f %f %f\n", q, searchPoint.x, searchPoint.y, searchPoint.z);
+	    foreground_cloud->push_back(searchPoint);
 	  }
+	q++;
       }
       return foreground_cloud;
     }
