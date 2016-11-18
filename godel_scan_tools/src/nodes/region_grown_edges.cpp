@@ -73,11 +73,11 @@ main (int argc, char** av)
   pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_with_normals (new pcl::PointCloud<pcl::PointXYZRGBNormal>());
 
   pcl::PCDWriter writer;
-  if (pcl::io::loadPCDFile(av[1], *bg_cloud_ptr)==-1)
+  if (pcl::io::loadPCDFile(av[1], *bg_cloud_ptr)==-1) // load the background cloud
   {
     return -1;
   }
-  if (pcl::io::loadPCDFile(av[2], *cloud_ptr)==-1)
+  if (pcl::io::loadPCDFile(av[2], *cloud_ptr)==-1) // load the cloud containing part and background
   {
     return -1;
   }
@@ -95,6 +95,7 @@ main (int argc, char** av)
   bg_cloud_nonans->is_dense = false;
   std::vector<int> indices, bg_indices;
 
+  // remove NANS from both clouds
   pcl::console::print_highlight ("Remove NANs from clouds\n");
   pcl::removeNaNFromPointCloud (*cloud_ptr, *cloud_no_nans, indices);
   pcl::removeNaNFromPointCloud (*bg_cloud_ptr, *bg_cloud_nonans, bg_indices);
@@ -106,9 +107,11 @@ main (int argc, char** av)
     cloud_no_nans->points[i].z +=8.0;
   }
   //  pcl::PointCloud<pcl::PointXYZ>::Ptr part_cloud_ptr = BS.remove_background(cloud_no_nans);
+
+  // sub-sample cloud randomly to increase processing speed for testing
   pcl::PointCloud<pcl::PointXYZ>::Ptr part_cloud_ptr(new pcl::PointCloud<pcl::PointXYZ>());
   BOOST_FOREACH(pcl::PointXYZ pt, cloud_no_nans->points){
-    int q = rand()%10;
+    int q = rand()%5;
     if (q ==0){
       if(pt.x !=0.0 && pt.y!=0.0 && pt.z !=0.0)      part_cloud_ptr->push_back(pt);
     }
@@ -116,7 +119,7 @@ main (int argc, char** av)
 
   // Segment the part into surface regions using a "region growing" scheme
   pcl::console::print_highlight ("segmenting\n");
-  surfaceSegmentation SS(part_cloud_ptr);
+  surfaceSegmentation SS(part_cloud_ptr); // removes NANs and computes normals
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud_ptr(new pcl::PointCloud<pcl::PointXYZRGB>());
   std::vector <pcl::PointIndices> clusters = SS.computeSegments(colored_cloud_ptr);
   pcl::console::print_highlight ("Segmented into %d clusters, colored cloud has %d points\n", clusters.size(), colored_cloud_ptr->points.size());
@@ -124,7 +127,7 @@ main (int argc, char** av)
   // Write the resulting setmented cloud into a pcd file
   writer.write<pcl::PointXYZRGB> ("segmented_part.pcd", *colored_cloud_ptr, false);
 
-  // at this point, we would want to select a segment for which we want the edges
+  // Select the desired surface segment for processing, currently either the default(largest), or specified via cmd line [-select_segment %d] 
   int selected_segment=-1;
   pcl::console::parse_argument (argc, av, "-select_segment", selected_segment);
   if(selected_segment<0){
@@ -140,67 +143,85 @@ main (int argc, char** av)
  
   // extract the selected segment from the part cloud
   pcl::PointCloud<pcl::PointXYZ>::Ptr segmented_surface_ptr(new pcl::PointCloud<pcl::PointXYZ>());
-  pcl::PointCloud<pcl::PointXYZRGB>::Ptr segmented_surface_ptr2(new pcl::PointCloud<pcl::PointXYZRGB>());
   for(int i=0; i<clusters[selected_segment].indices.size(); i++){
-    pcl::PointXYZRGB pt(255,0,0);
-    pt.x = part_cloud_ptr->points[i].x;
-    pt.y = part_cloud_ptr->points[i].y;
-    pt.z = part_cloud_ptr->points[i].z;
-    segmented_surface_ptr2->points.push_back(pt); // save a red point cloud with same indices as colorless one
-    segmented_surface_ptr->points.push_back(part_cloud_ptr->points[i]);
+    int index = clusters[selected_segment].indices[i];
+    pcl::PointXYZ pt(part_cloud_ptr->points[index]);
+    pt.x +=400; // offset cloud to make it easier to show
+    segmented_surface_ptr->points.push_back(pt);
   }
-  
-  // now create a mesh from just that segment
-  pcl::console::print_highlight ("computing mesh\n");
   SS.setInputCloud(segmented_surface_ptr);
-  Mesh  tmesh =   SS.computeMesh();
 
-  pcl::console::print_highlight ("computing boundary\n");
-  std::vector<Mesh::HalfEdgeIndices> boundary_half_edges;
-  SS.getBoundBoundaryHalfEdges(tmesh, boundary_half_edges);
+  pcl::console::print_highlight ("computing boundary of segment cloud\n");
+  pcl::PointCloud<pcl::Boundary>::Ptr    boundary_ptr = SS.getBoundaryCloud();	
+  pcl::PointCloud<pcl::PointXYZ>::Ptr boundary_cloud_ptr(new pcl::PointCloud<pcl::PointXYZ>());
+  int k=0;
 
-  for(int j=0; j<boundary_half_edges.size(); j++){
-    for(int i=0; i<boundary_half_edges[j].size(); i++){
-      pcl::geometry::VertexIndex ei = tmesh.getOriginatingVertexIndex(boundary_half_edges[j][i]);
-      int k = ei.get();
-      segmented_surface_ptr2->points[k].r = 255;
-      segmented_surface_ptr2->points[k].g = 255;
-      segmented_surface_ptr2->points[k].b = 0;
+  pcl::IndicesPtr boundary_idx(new std::vector<int>());
+  BOOST_FOREACH(pcl::Boundary pt, boundary_ptr->points){
+    if(pt.boundary_point){
+      boundary_cloud_ptr->points.push_back(segmented_surface_ptr->points[k]);
+      boundary_idx->push_back(k);
+    }
+    k++;
+  }
+  pcl::console::print_highlight ("boundary has %d points\n", boundary_cloud_ptr->points.size());
+
+
+  std::vector< pcl::IndicesPtr > sorted_boundaries;
+  int num_boundaries = SS.sortBoundary(boundary_idx, sorted_boundaries);
+  pcl::console::print_highlight ("num_boundaries = %d but sorted_boundaries.size() = %d\n",num_boundaries, sorted_boundaries.size());
+  int max=0;
+  int max_idx=0;
+  for(int i=0;i<sorted_boundaries.size();i++){
+    pcl::console::print_highlight ("boundary %d has %d points\n", i, sorted_boundaries[i]->size());
+    if(sorted_boundaries[i]->size() > max){
+      max = sorted_boundaries[i]->size();
+      max_idx = i;
     }
   }
-
-  //  pcl::console::print_highlight ("visualization boundary has %d edges\n", boundary_half_edges.size());
+  pcl::console::print_highlight ("max length boundary has %d points and index %d\n", max, max_idx);
 
   // show surface with boundary line drawn
   boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
   viewer->setBackgroundColor (0, 0, 0);
-  pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZRGB> single_color(segmented_surface_ptr2, 0, 255, 0);
-  pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(segmented_surface_ptr2);
-  viewer->addPointCloud<pcl::PointXYZRGB> (segmented_surface_ptr2, rgb, "surface cloud");
-  viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "surface cloud");
+  pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> boundary_color(boundary_cloud_ptr, 255, 255, 255);
+  pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> surface_color(segmented_surface_ptr, 55, 76, 150);
+  pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(colored_cloud_ptr);
+  viewer->addPointCloud<pcl::PointXYZ> (boundary_cloud_ptr, boundary_color, "boundary cloud");
+  viewer->addPointCloud<pcl::PointXYZRGB> (colored_cloud_ptr, rgb, "colored cloud");
+  viewer->addPointCloud<pcl::PointXYZ> (segmented_surface_ptr, surface_color, "segmented_surface");
+  viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "segmented_surface");
+  viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "colored cloud");
+  viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "boundary cloud");
   //  viewer->addCoordinateSystem (1.0);
   viewer->initCameraParameters ();
-  // note, all boundaries are provided, some may be interior. The exterior one is the one we want, but which is that? 
-  // perhaps it is the longest, but perhaps not. If the points are uniformly distributed over the surface, then most of the time
-  // the longest boundary_half_edge vector will be the exterior. 
+
+  float red[6], green[6], blue[6];
+  int color = 0;
+  red[0] = 1.0; green[0] = 0.0;  blue[0] = 0.0; 
+  red[1] = 0.0; green[1] =1.0;   blue[1] = 0.0;
+  red[2] = 0.0; green[2] =0.0;   blue[2] = 1.0; 
+  red[3] = 0.0; green[3] =1.0;   blue[3] = 1.0; 
+  red[4] = 1.0; green[4] =0.0;   blue[4] = 1.0; 
+  red[5] = 1.0; green[5] =1.0;   blue[5] = 0.0; 
+
   int q=0;
-  for(int j=0; j<boundary_half_edges.size(); j++){
-    //    pcl::console::print_highlight ("boundary %d has %d edges\n", j,boundary_half_edges[j].size());
-    for(int i=0; i<boundary_half_edges[j].size(); i++){
-      pcl::geometry::VertexIndex pnt1_index = tmesh.getOriginatingVertexIndex(boundary_half_edges[j][i]);
-      pcl::geometry::VertexIndex pnt2_index = tmesh.getTerminatingVertexIndex(boundary_half_edges[j][i]);
+  for(int i=0;i<  sorted_boundaries.size();i++){
+    for(int j=0; j<sorted_boundaries[i]->size()-1; j++){
       char line_number[255];
       sprintf(line_number,"%03d",q++);
       std::string ls = std::string("line_") + std::string(line_number);
-      int d1 = pnt1_index.get();
-      int d2 = pnt2_index.get();
-
-      viewer->addLine<pcl::PointXYZ> (segmented_surface_ptr->points[d1],
-				      segmented_surface_ptr->points[d2],
+      int idx1 = sorted_boundaries[i]->at(j);
+      int idx2 = sorted_boundaries[i]->at(j+1);
+      viewer->addLine<pcl::PointXYZ> ( segmented_surface_ptr->points[idx1],
+				       segmented_surface_ptr->points[idx2],
 				      ls.c_str());
-      viewer->setShapeRenderingProperties ( pcl::visualization::PCL_VISUALIZER_COLOR, 0.0, 0.99, 0, ls.c_str());
-    }
-  }
+      viewer->setShapeRenderingProperties ( pcl::visualization::PCL_VISUALIZER_COLOR, red[color], green[color], blue[color], ls.c_str());
+    }// end for each boundary point
+    color = (color+1)%6;
+  } // end for each boundary 
+
+
   if (pcl::console::find_switch (argc, av, "-dump"))
   {
     pcl::console::print_highlight ("Writing clusters to clusters.dat\n");

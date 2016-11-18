@@ -12,9 +12,12 @@
 #include <pcl/geometry/quad_mesh.h>
 #include <pcl/geometry/polygon_mesh.h>
 #include <pcl/geometry/mesh_conversion.h>
+#include <pcl/features/boundary.h>
 #include <pcl/io/pcd_io.h>
 #include <pcl/io/ply_io.h>
 #include <pcl/io/vtk_io.h>
+#include <pcl/surface/concave_hull.h>
+#include <pcl/surface/ear_clipping.h>
 #include <boost/foreach.hpp>
 
 template <bool IsManifoldT>
@@ -85,37 +88,58 @@ class surfaceSegmentation{
     }
     setInputCloud(icloud);
   }
+  /** @brief creates a cloud from every point estimated to be on the boundary of input_cloud_
+      @return a boundary point cloud
+  */
+  pcl::PointCloud<pcl::Boundary>::Ptr getBoundaryCloud()
+    {
+      pcl::PointCloud<pcl::Boundary>::Ptr bps (new pcl::PointCloud<pcl::Boundary> ()); 
+      if(normals_->points.size()==0 || input_cloud_->points.size() == 0){
+	pcl::console::print_highlight ("must set input_cloud_ and compute normals_ before calling getBoundaryCloud()\n");
+      }
+      else{
+	pcl::BoundaryEstimation<pcl::PointXYZ, pcl::Normal, pcl::Boundary> best;
+	best.setInputCloud(input_cloud_);
+	best.setInputNormals(normals_);
+	best.setRadiusSearch (20.0); 
+	//	best.setAngleThreshold(90.0*3.14/180.0);
+	best.setSearchMethod (pcl::search::KdTree<pcl::PointXYZ>::Ptr (new pcl::search::KdTree<pcl::PointXYZ>)); 
+	best.compute(*bps); 
+      }
+      return(bps);
+    }
 
   std::vector <pcl::PointIndices> computeSegments(pcl::PointCloud<pcl::PointXYZRGB>::Ptr &colored_cloud)
-  {
-    // Region growing
-    pcl::search::Search<pcl::PointXYZ>::Ptr tree = boost::shared_ptr<pcl::search::Search<pcl::PointXYZ> > (new pcl::search::KdTree<pcl::PointXYZ>);
-    pcl::RegionGrowing<pcl::PointXYZ, pcl::Normal> rg;
-    rg.setSmoothModeFlag (false); // Depends on the cloud being processed
-    rg.setSmoothnessThreshold (15.0 / 180.0 * M_PI);
-    rg.setMaxClusterSize(1000000);
-    rg.setSearchMethod (tree);
-    rg.setMinClusterSize(10);
-    rg.setNumberOfNeighbours (30);
-    float smooth_thresh = rg.getSmoothnessThreshold();
-    float resid_thresh = rg.getResidualThreshold();
-    // rg.setCurvatureTestFlag();
-    rg.setResidualTestFlag(true);
-    rg.setResidualThreshold(resid_thresh);
-    rg.setCurvatureThreshold(1.0);
-    
-    rg.setInputCloud (input_cloud_);
-    rg.setInputNormals (normals_);
-    
-    rg.extract (clusters_);
-    colored_cloud = rg.getColoredCloud();
-    return(clusters_);
-  }
+    {
+      // Region growing
+      pcl::search::Search<pcl::PointXYZ>::Ptr tree = boost::shared_ptr<pcl::search::Search<pcl::PointXYZ> > (new pcl::search::KdTree<pcl::PointXYZ>);
+      pcl::RegionGrowing<pcl::PointXYZ, pcl::Normal> rg;
+      rg.setSmoothModeFlag (false); // Depends on the cloud being processed
+      rg.setSmoothnessThreshold (10.0 / 180.0 * M_PI);
+      rg.setMaxClusterSize(1000000);
+      rg.setSearchMethod (tree);
+      rg.setMinClusterSize(10);
+      rg.setNumberOfNeighbours (30);
+      float smooth_thresh = rg.getSmoothnessThreshold();
+      float resid_thresh = rg.getResidualThreshold();
+      // rg.setCurvatureTestFlag();
+      rg.setResidualTestFlag(true);
+      rg.setResidualThreshold(resid_thresh);
+      rg.setCurvatureThreshold(1.0);
+      
+      rg.setInputCloud (input_cloud_);
+      rg.setInputNormals (normals_);
+      
+      rg.extract (clusters_);
+      colored_cloud = rg.getColoredCloud();
+      return(clusters_);
+    }
   
 
   /** @brief computes mesh on the cloud results are in triangles_, parts_, and states_ */
   Mesh computeMesh()
   {
+    // use gpg3 to create a mesh, then traverse boundary of mesh to get boundaries
     // concatenate rgb fields and normals to cloud
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_with_colors(new pcl::PointCloud<pcl::PointXYZRGB>);
     pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_with_normals(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
@@ -127,12 +151,13 @@ class surfaceSegmentation{
       cloud_with_colors->push_back(npt);
     }
     pcl::concatenateFields (*cloud_with_colors, *normals_, *cloud_with_normals);
+
     // Initialize objects
     pcl::GreedyProjectionTriangulation<pcl::PointXYZRGBNormal> gp3;
     // Create search tree*
     pcl::search::KdTree<pcl::PointXYZRGBNormal>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGBNormal>);
     tree->setInputCloud (cloud_with_normals);
-
+    
     // Set typical values for the parameters
     gp3.setSearchRadius (50.0);
     gp3.setMu (2.5);
@@ -143,16 +168,124 @@ class surfaceSegmentation{
     gp3.setNormalConsistency(false);
     gp3.setSearchMethod (tree);    
     gp3.setInputCloud (cloud_with_normals);
-
+    
     // Get results
     gp3.reconstruct (triangles_);
     parts_ = gp3.getPartIDs();
     states_ = gp3.getPointStates();
-    
+
     pcl::console::print_highlight ("convert to half edge mesh\n");
     pcl::geometry::toHalfEdgeMesh(triangles_, HEM_);
-    pcl::io::saveVTKFile("path.vtk",triangles_); 
+
     return(HEM_);
+  }
+  std::pair<int, int> getNextUnused(std::vector< std::pair<int,int> > used)
+  {
+    std::pair<int,int> rtn;
+    rtn.first=-1;
+    rtn.second=-1;
+    for(int i=0;i<used.size();i++){
+      if(used[i].first == 0)
+	{
+	  rtn = used[i];
+	  used[i].first = 1;
+	  if(rtn.second ==0)     pcl::console::print_highlight ("returning 0 with i=%d\n",i);
+	  break;
+	}
+    }
+
+    return(rtn);
+  }
+  int sortBoundary(pcl::IndicesPtr& boundary_indices, std::vector<pcl::IndicesPtr> &sorted_boundaries)
+    {
+      int longest = 0;
+      int long_idx = 0;
+      int length=0;
+      for(int i=0;i<sorted_boundaries.size();i++) sorted_boundaries[i]->clear();
+      sorted_boundaries.clear();
+
+      /* initialize used pairs */
+      std::vector<std::pair<int,int> > used;
+      used.reserve(boundary_indices->size());
+      for(int i=0;i<boundary_indices->size();i++){
+	std::pair<int,int> p;
+	p.first = 0;
+	p.second = boundary_indices->at(i);
+	used.push_back(p); 
+      }
+
+      pcl::KdTreeFLANN<pcl::PointXYZ> kdtree(true);// true indicates return sorted radius search results
+      kdtree.setInputCloud(input_cloud_, boundary_indices); // use just the boundary points for searching
+      
+      std::pair<int, int> n = getNextUnused(used);
+      pcl::console::print_highlight ("just starting\n");
+      while( n.first >= 0 ){
+	// add first point to the current boundary
+	pcl::IndicesPtr current_boundary(new std::vector<int>);
+	current_boundary->push_back(n.second);
+	
+	// find all points within small radius of current boundary point
+	double radius = 30.0;
+	std::vector<int> pt_indices;
+	std::vector<float> pt_dist;
+	pcl::PointXYZ spt = input_cloud_->points[n.second];
+	while ( kdtree.radiusSearch (spt, radius, pt_indices, pt_dist) > 1 ){ // gives index into input_cloud_, 
+	  int q=0;
+	  int add_pt_idx = -1;
+	  do{// find closest unused point in vicinity
+	    int pair_index=0;
+	    for(int i=0;i<used.size();i++){ // for each item in used list 
+	      if(pt_indices[q] == used[i].second)// look for a match
+		{
+		  if(used[i].first ==0)// see if match is used
+		    {
+		      pair_index= i;
+		      used[i].first = 1; // mark it used
+		      add_pt_idx = used[i].second;
+		    }// used
+		  break;
+		}// match indices
+	    }
+	    q++;
+	  }while (q<pt_indices.size() && add_pt_idx == -1); // is there an unused point in the vicinity of the current spt?
+	  if(add_pt_idx !=-1){
+	    current_boundary->push_back(add_pt_idx);
+	    spt = input_cloud_->points[add_pt_idx]; // search near the new point next time
+	  } // end if ad_pt_idx was found
+	  else			
+	    {
+	      pcl::console::print_highlight ("adding boundary with %d points\n",current_boundary->size());
+	      break;		/* end of boundary */
+	    }
+	}// there are points within the radius
+	sorted_boundaries.push_back(current_boundary);
+	n = getNextUnused(used);
+      }
+      return(sorted_boundaries.size());
+    }
+  bool applyConcaveHull(pcl::PointCloud<pcl::PointXYZ>::Ptr& in, pcl::PolygonMesh& mesh)
+  {
+    pcl::PolygonMesh::Ptr hull_mesh_ptr(new pcl::PolygonMesh);
+    pcl::ConcaveHull<pcl::PointXYZ> chull;
+    chull.setInputCloud(in);
+    chull.setAlpha(500.0);
+    //    chull.reconstruct(*hull_mesh_ptr);
+    chull.reconstruct(mesh);
+    
+    //    pcl::console::print_highlight ("hull_mesh  has  %d polygons\n", hull_mesh_ptr->polygons.size());
+    pcl::console::print_highlight ("mesh  has  %d polygons\n", mesh.polygons.size());
+
+    return mesh.polygons.size() > 0;
+    /*
+    // Given a complex concave hull polygon, seperate it into triangles
+    pcl::EarClipping clipping;
+    clipping.setInputMesh(hull_mesh_ptr);
+    clipping.process(mesh);
+
+    pcl::console::print_highlight ("ear clipped mesh has %d polygons\n", mesh.polygons.size());
+
+    return mesh.polygons.size() > 0;
+    */
   }
 
   void getBoundBoundaryHalfEdges (const Mesh &mesh,
@@ -228,6 +361,7 @@ class surfaceSegmentation{
   /** @brief compute the normals and store in normals_, this is requried for both segmentation and meshing*/
   void computeNormals()
   {
+    normals_->points.clear();
     // Estimate the normals
     pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> ne;
     ne.setInputCloud (input_cloud_);
