@@ -20,6 +20,11 @@
 #include <pcl/surface/ear_clipping.h>
 #include <boost/foreach.hpp>
 
+struct Pose{
+  double x,y,z;
+  double R[3][3];
+};
+
 template <bool IsManifoldT>
 struct MeshTraits
 {
@@ -263,6 +268,60 @@ class surfaceSegmentation{
       }
       return(sorted_boundaries.size());
     }
+  void getBoundaryTrajectory(std::vector<pcl::IndicesPtr> &boundaries, int sb, std::vector<Pose> &poses)
+  {
+    // grab the position and normal values
+    std::vector<pcl::PointNormal> pts;
+    for(int i=0;i<boundaries[sb]->size();i++){
+      pcl::PointNormal pt;
+      int idx = boundaries[sb]->at(i);
+      pt.x = input_cloud_->points[idx].x;
+      pt.y = input_cloud_->points[idx].y;
+      pt.z = input_cloud_->points[idx].z;
+      pt.normal_x = normals_->at(idx).normal_x;
+      pt.normal_y = normals_->at(idx).normal_y;
+      pt.normal_z = normals_->at(idx).normal_z;
+      pts.push_back(pt);
+    }
+
+    std::vector<pcl::PointXYZ> vels;
+    for(int i=0;i<pts.size();i++){
+      pcl::PointXYZ v;
+      int next = (i+1)%pts.size();
+      v.x = pts[next].x-pts[i].x;
+      v.y = pts[next].y-pts[i].y;
+      v.z = pts[next].z-pts[i].z;
+      double norm = sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
+      if(norm==0) norm = 1.0;	/* avoid division by zero */
+      v.x = v.x/norm;
+      v.y = v.y/norm;
+      v.z = v.z/norm;
+      vels.push_back(v);
+    }
+
+    poses.clear();
+    for(int i=0;i<pts.size();i++){
+      Pose current_pose;
+      current_pose.x = pts[i].x;
+      current_pose.y = pts[i].y;
+      current_pose.z = pts[i].z;
+      // set z vector oposite of normal of surface
+      current_pose.R[0][2] = -pts[i].normal_x;
+      current_pose.R[1][2] = -pts[i].normal_y;
+      current_pose.R[2][2] = -pts[i].normal_z;
+
+      // set x of tool in direction of motion
+      current_pose.R[0][0] = vels[i].x;
+      current_pose.R[1][0] = vels[i].y;
+      current_pose.R[2][0] = vels[i].z;
+
+      // y is the cross product of z with x
+      current_pose.R[0][1] =  current_pose.R[1][2]*current_pose.R[2][0]  -  current_pose.R[1][0]*current_pose.R[2][2];
+      current_pose.R[1][1] = -current_pose.R[0][2]*current_pose.R[2][0] + current_pose.R[0][0]*current_pose.R[2][2];
+      current_pose.R[2][1] =  current_pose.R[0][2]*current_pose.R[1][0]  -  current_pose.R[0][0]*current_pose.R[1][2];
+      poses.push_back(current_pose);
+    }
+  }
   bool applyConcaveHull(pcl::PointCloud<pcl::PointXYZ>::Ptr& in, pcl::PolygonMesh& mesh)
   {
     pcl::PolygonMesh::Ptr hull_mesh_ptr(new pcl::PolygonMesh);

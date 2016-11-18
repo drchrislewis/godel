@@ -221,7 +221,10 @@ main (int argc, char** av)
     color = (color+1)%6;
   } // end for each boundary 
 
-
+  std::vector<Pose> pose_trajectory;
+  SS.getBoundaryTrajectory(sorted_boundaries, 0, pose_trajectory);
+  pcl::console::print_highlight ("pose_trajectory has %d poses\n", pose_trajectory.size());
+    
   if (pcl::console::find_switch (argc, av, "-dump"))
   {
     pcl::console::print_highlight ("Writing clusters to clusters.dat\n");
