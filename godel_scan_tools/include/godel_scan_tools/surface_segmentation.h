@@ -104,7 +104,7 @@ class surfaceSegmentation{
 	pcl::BoundaryEstimation<pcl::PointXYZ, pcl::Normal, pcl::Boundary> best;
 	best.setInputCloud(input_cloud_);
 	best.setInputNormals(normals_);
-	best.setRadiusSearch (20.0); 
+	best.setRadiusSearch (radius_); 
 	//	best.setAngleThreshold(90.0*3.14/180.0);
 	best.setSearchMethod (pcl::search::KdTree<pcl::PointXYZ>::Ptr (new pcl::search::KdTree<pcl::PointXYZ>)); 
 	best.compute(*bps); 
@@ -162,7 +162,7 @@ class surfaceSegmentation{
     tree->setInputCloud (cloud_with_normals);
     
     // Set typical values for the parameters
-    gp3.setSearchRadius (50.0);
+    gp3.setSearchRadius (radius_);
     gp3.setMu (2.5);
     gp3.setMaximumNearestNeighbors (500);
     gp3.setMaximumSurfaceAngle(M_PI/4); // 45 degrees
@@ -192,7 +192,7 @@ class surfaceSegmentation{
 	{
 	  rtn = used[i];
 	  used[i].first = 1;
-	  if(rtn.second ==0)     pcl::console::print_highlight ("returning 0 with i=%d\n",i);
+	  //	  if(rtn.second ==0)     pcl::console::print_highlight ("returning 0 with i=%d\n",i);
 	  break;
 	}
     }
@@ -221,18 +221,16 @@ class surfaceSegmentation{
       kdtree.setInputCloud(input_cloud_, boundary_indices); // use just the boundary points for searching
       
       std::pair<int, int> n = getNextUnused(used);
-      pcl::console::print_highlight ("just starting\n");
       while( n.first >= 0 ){
 	// add first point to the current boundary
 	pcl::IndicesPtr current_boundary(new std::vector<int>);
 	current_boundary->push_back(n.second);
 	
 	// find all points within small radius of current boundary point
-	double radius = 30.0;
 	std::vector<int> pt_indices;
 	std::vector<float> pt_dist;
 	pcl::PointXYZ spt = input_cloud_->points[n.second];
-	while ( kdtree.radiusSearch (spt, radius, pt_indices, pt_dist) > 1 ){ // gives index into input_cloud_, 
+	while ( kdtree.radiusSearch (spt, radius_, pt_indices, pt_dist) > 1 ){ // gives index into input_cloud_, 
 	  int q=0;
 	  int add_pt_idx = -1;
 	  do{// find closest unused point in vicinity
@@ -257,7 +255,7 @@ class surfaceSegmentation{
 	  } // end if ad_pt_idx was found
 	  else			
 	    {
-	      pcl::console::print_highlight ("adding boundary with %d points\n",current_boundary->size());
+	      //	      pcl::console::print_highlight ("adding boundary with %d points\n",current_boundary->size());
 	      break;		/* end of boundary */
 	    }
 	}// there are points within the radius
@@ -266,7 +264,15 @@ class surfaceSegmentation{
       }
       return(sorted_boundaries.size());
     }
-  
+  void setSearchRadius(double radius)
+  {
+    if(radius>0) radius_ = radius;
+  }
+  double  getSearchRadius()
+  {
+    return(radius_);
+  }
+
   bool setSmoothCoef(std::vector<double> &coef)
   {
     if(coef.size()%2 == 1) {		// smoothing filters must have an odd number of coefficients
@@ -294,7 +300,6 @@ class surfaceSegmentation{
     for(int j=num_coef_-1; j>=0; j--) { 
       xv.push_back(x_in[n-j-1]);
     }
-    pcl::console::print_highlight ("num_coef = %d n = %d size of xv =%d\n", num_coef_,n, xv.size());    
     // cycle through every and apply the filter
     for(int j=1; j<n-1; j++){
 
@@ -331,20 +336,13 @@ class surfaceSegmentation{
       ny_in.push_back(pts_in[i].normal_y);
       nz_in.push_back(pts_in[i].normal_z);
     }
-    pcl::console::print_highlight ("smoothing x\n");    
     smoothVector(x_in,x_out);
-    pcl::console::print_highlight ("smoothing y\n");    
     smoothVector(y_in,y_out);
-    pcl::console::print_highlight ("smoothing z\n");    
     smoothVector(z_in,z_out);
-    pcl::console::print_highlight ("smoothing nx\n");    
     smoothVector(nx_in,nx_out);
-    pcl::console::print_highlight ("smoothing ny\n");    
     smoothVector(ny_in,ny_out);
-    pcl::console::print_highlight ("smoothing nz\n");    
     smoothVector(nz_in,nz_out);
 
-    pcl::console::print_highlight ("normalizing and creating pose trajectory\n");    
     pts_out.clear();
     for(int i=0;i<pts_in.size(); i++){
       pcl::PointNormal pt;
@@ -521,7 +519,7 @@ class surfaceSegmentation{
     ne.setInputCloud (input_cloud_);
     pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ> ());
     ne.setSearchMethod (tree); 
-    //  ne.setRadiusSearch (3.0);
+    //  ne.setRadiusSearch (radius_);
     ne.setKSearch (50);
     ne.compute (*normals_);
   }
@@ -545,6 +543,7 @@ class surfaceSegmentation{
       std::vector<double> coef_;
       double gain_;
 
-
+      // search terms
+      double radius_;
 };
 #endif

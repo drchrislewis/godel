@@ -59,7 +59,7 @@ main (int argc, char** av)
 {
   if (argc < 3)
   {
-    pcl::console::print_info ("Syntax is: %s <source-pcd-background_file> <source-pcd-with_part_file> [-dump] [-select_segment]\n\n", av[0]);
+    pcl::console::print_info ("Syntax is: %s <source-pcd-background_file> <source-pcd-with_part_file> [-dump] [-select_segment] [-meters]\n\n", av[0]);
     pcl::console::print_info ("If -dump is provided write the extracted clusters to cluster.dat\n\n");
     return (1);
   }
@@ -111,7 +111,7 @@ main (int argc, char** av)
   // sub-sample cloud randomly to increase processing speed for testing
   pcl::PointCloud<pcl::PointXYZ>::Ptr part_cloud_ptr(new pcl::PointCloud<pcl::PointXYZ>());
   BOOST_FOREACH(pcl::PointXYZ pt, cloud_no_nans->points){
-    int q = 0;//rand()%10;
+    int q = rand()%10;
     if (q ==0){
       if(pt.x !=0.0 && pt.y!=0.0 && pt.z !=0.0)      part_cloud_ptr->push_back(pt);
     }
@@ -120,12 +120,18 @@ main (int argc, char** av)
   // Segment the part into surface regions using a "region growing" scheme
   pcl::console::print_highlight ("segmenting\n");
   surfaceSegmentation SS(part_cloud_ptr); // removes NANs and computes normals
+  if(pcl::console::find_switch(argc, av, "-meters")){
+    SS.setSearchRadius(.03);
+  }else{
+    SS.setSearchRadius(30.0);
+  }
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud_ptr(new pcl::PointCloud<pcl::PointXYZRGB>());
   std::vector <pcl::PointIndices> clusters = SS.computeSegments(colored_cloud_ptr);
   pcl::console::print_highlight ("Segmented into %d clusters, colored cloud has %d points\n", clusters.size(), colored_cloud_ptr->points.size());
 
   // Write the resulting setmented cloud into a pcd file
   writer.write<pcl::PointXYZRGB> ("segmented_part.pcd", *colored_cloud_ptr, false);
+
 
   // Select the desired surface segment for processing, currently either the default(largest), or specified via cmd line [-select_segment %d] 
   int selected_segment=-1;
@@ -164,13 +170,12 @@ main (int argc, char** av)
     }
     k++;
   }
-  pcl::console::print_highlight ("boundary has %d points\n", boundary_cloud_ptr->points.size());
+  pcl::console::print_highlight ("cloud has %d boundary points\n", boundary_cloud_ptr->points.size());
 
 
   // sort the boundaries
   std::vector< pcl::IndicesPtr > sorted_boundaries;
   int num_boundaries = SS.sortBoundary(boundary_idx, sorted_boundaries);
-  pcl::console::print_highlight ("num_boundaries = %d but sorted_boundaries.size() = %d\n",num_boundaries, sorted_boundaries.size());
   int max=0;
   int max_idx=0;
   for(int i=0;i<sorted_boundaries.size();i++){
@@ -180,7 +185,6 @@ main (int argc, char** av)
       max_idx = i;
     }
   }
-  pcl::console::print_highlight ("max length boundary has %d points and index %d\n", max, max_idx);
 
   // show surface with boundary line drawn
   boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
@@ -189,10 +193,10 @@ main (int argc, char** av)
   pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> surface_color(segmented_surface_ptr, 55, 76, 150);
   pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(colored_cloud_ptr);
   //  viewer->addPointCloud<pcl::PointXYZ> (boundary_cloud_ptr, boundary_color, "boundary cloud");
-  //  viewer->addPointCloud<pcl::PointXYZRGB> (colored_cloud_ptr, rgb, "colored cloud");
+  viewer->addPointCloud<pcl::PointXYZRGB> (colored_cloud_ptr, rgb, "colored cloud");
   //  viewer->addPointCloud<pcl::PointXYZ> (segmented_surface_ptr, surface_color, "segmented_surface");
   //  viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "segmented_surface");
-  //  viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "colored cloud");
+  viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "colored cloud");
   //  viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "boundary cloud");
   //  viewer->addCoordinateSystem (1.0);
   viewer->initCameraParameters ();
@@ -228,6 +232,10 @@ main (int argc, char** av)
   filt_coef.push_back(1);
   filt_coef.push_back(2);
   filt_coef.push_back(3);
+  filt_coef.push_back(4);
+  filt_coef.push_back(5);
+  filt_coef.push_back(4);
+  filt_coef.push_back(3);
   filt_coef.push_back(2);
   filt_coef.push_back(1);
   SS.setSmoothCoef(filt_coef);	// note, automatically normalizes coefficients for unity gain of filter
@@ -245,7 +253,7 @@ main (int argc, char** av)
       sprintf(line_number,"%03d",q++);
       std::string ls = std::string("pose_") + std::string(line_number);
       Eigen::Affine3f pose(pose_trajectory[i].matrix());
-      viewer->addCoordinateSystem (30, pose, 0);
+      viewer->addCoordinateSystem (.030, pose, 0);
     }
   }
     
