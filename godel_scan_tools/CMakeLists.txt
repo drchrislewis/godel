@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(godel_scan_tools)
 
+
+FIND_PACKAGE(Eigen3)
+IF (EIGEN3_FOUND)
+  MESSAGE(STATUS "Eigen3 found in ${EIGEN_INCLUDE_DIRS}")
+ENDIF(EIGEN3_FOUND)
+
 ## System dependencies are found with CMake's conventions
  find_package(catkin REQUIRED COMPONENTS 
    roscpp

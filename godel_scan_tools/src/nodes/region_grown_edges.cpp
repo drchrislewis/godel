@@ -111,7 +111,7 @@ main (int argc, char** av)
   // sub-sample cloud randomly to increase processing speed for testing
   pcl::PointCloud<pcl::PointXYZ>::Ptr part_cloud_ptr(new pcl::PointCloud<pcl::PointXYZ>());
   BOOST_FOREACH(pcl::PointXYZ pt, cloud_no_nans->points){
-    int q = rand()%5;
+    int q = rand()%10;
     if (q ==0){
       if(pt.x !=0.0 && pt.y!=0.0 && pt.z !=0.0)      part_cloud_ptr->push_back(pt);
     }
@@ -146,7 +146,7 @@ main (int argc, char** av)
   for(int i=0; i<clusters[selected_segment].indices.size(); i++){
     int index = clusters[selected_segment].indices[i];
     pcl::PointXYZ pt(part_cloud_ptr->points[index]);
-    pt.x +=400; // offset cloud to make it easier to show
+    //    pt.x +=400; // offset cloud to make it easier to show
     segmented_surface_ptr->points.push_back(pt);
   }
   SS.setInputCloud(segmented_surface_ptr);
@@ -167,6 +167,7 @@ main (int argc, char** av)
   pcl::console::print_highlight ("boundary has %d points\n", boundary_cloud_ptr->points.size());
 
 
+  // sort the boundaries
   std::vector< pcl::IndicesPtr > sorted_boundaries;
   int num_boundaries = SS.sortBoundary(boundary_idx, sorted_boundaries);
   pcl::console::print_highlight ("num_boundaries = %d but sorted_boundaries.size() = %d\n",num_boundaries, sorted_boundaries.size());
@@ -187,12 +188,12 @@ main (int argc, char** av)
   pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> boundary_color(boundary_cloud_ptr, 255, 255, 255);
   pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> surface_color(segmented_surface_ptr, 55, 76, 150);
   pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(colored_cloud_ptr);
-  viewer->addPointCloud<pcl::PointXYZ> (boundary_cloud_ptr, boundary_color, "boundary cloud");
-  viewer->addPointCloud<pcl::PointXYZRGB> (colored_cloud_ptr, rgb, "colored cloud");
-  viewer->addPointCloud<pcl::PointXYZ> (segmented_surface_ptr, surface_color, "segmented_surface");
-  viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "segmented_surface");
-  viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "colored cloud");
-  viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "boundary cloud");
+  //  viewer->addPointCloud<pcl::PointXYZ> (boundary_cloud_ptr, boundary_color, "boundary cloud");
+  //  viewer->addPointCloud<pcl::PointXYZRGB> (colored_cloud_ptr, rgb, "colored cloud");
+  //  viewer->addPointCloud<pcl::PointXYZ> (segmented_surface_ptr, surface_color, "segmented_surface");
+  //  viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "segmented_surface");
+  //  viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "colored cloud");
+  //  viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "boundary cloud");
   //  viewer->addCoordinateSystem (1.0);
   viewer->initCameraParameters ();
 
@@ -211,6 +212,7 @@ main (int argc, char** av)
       char line_number[255];
       sprintf(line_number,"%03d",q++);
       std::string ls = std::string("line_") + std::string(line_number);
+
       int idx1 = sorted_boundaries[i]->at(j);
       int idx2 = sorted_boundaries[i]->at(j+1);
       viewer->addLine<pcl::PointXYZ> ( segmented_surface_ptr->points[idx1],
@@ -221,9 +223,21 @@ main (int argc, char** av)
     color = (color+1)%6;
   } // end for each boundary 
 
-  std::vector<Pose> pose_trajectory;
+  //  std::vector<Pose> pose_trajectory;
+  std::vector<Eigen::Matrix4f, Eigen::aligned_allocator<Eigen::Matrix4f> > pose_trajectory;
   SS.getBoundaryTrajectory(sorted_boundaries, 0, pose_trajectory);
   pcl::console::print_highlight ("pose_trajectory has %d poses\n", pose_trajectory.size());
+
+  q=0;
+  for(int i=0;i<pose_trajectory.size();i++){
+    if(q++%20 ==0){
+      char line_number[255];
+      sprintf(line_number,"%03d",q++);
+      std::string ls = std::string("pose_") + std::string(line_number);
+      Eigen::Affine3f pose(pose_trajectory[i].matrix());
+      viewer->addCoordinateSystem (30, pose, 0);
+    }
+  }
     
   if (pcl::console::find_switch (argc, av, "-dump"))
   {

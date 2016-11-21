@@ -19,6 +19,8 @@
 #include <pcl/surface/concave_hull.h>
 #include <pcl/surface/ear_clipping.h>
 #include <boost/foreach.hpp>
+#include <Eigen/Geometry>
+#include <Eigen/StdVector>
 
 struct Pose{
   double x,y,z;
@@ -268,7 +270,8 @@ class surfaceSegmentation{
       }
       return(sorted_boundaries.size());
     }
-  void getBoundaryTrajectory(std::vector<pcl::IndicesPtr> &boundaries, int sb, std::vector<Pose> &poses)
+  void getBoundaryTrajectory(std::vector<pcl::IndicesPtr> &boundaries, int sb, 
+			     std::vector<Eigen::Matrix4f, Eigen::aligned_allocator<Eigen::Matrix4f> > &poses)
   {
     // grab the position and normal values
     std::vector<pcl::PointNormal> pts;
@@ -301,24 +304,25 @@ class surfaceSegmentation{
 
     poses.clear();
     for(int i=0;i<pts.size();i++){
-      Pose current_pose;
-      current_pose.x = pts[i].x;
-      current_pose.y = pts[i].y;
-      current_pose.z = pts[i].z;
+      Eigen::Matrix4f current_pose = Eigen::MatrixXf::Identity(4,4);
+      current_pose(0,3) = pts[i].x;
+      current_pose(1,3) = pts[i].y;
+      current_pose(2,3) = pts[i].z;
+
       // set z vector oposite of normal of surface
-      current_pose.R[0][2] = -pts[i].normal_x;
-      current_pose.R[1][2] = -pts[i].normal_y;
-      current_pose.R[2][2] = -pts[i].normal_z;
+      current_pose(0,2) = -pts[i].normal_x;
+      current_pose(1,2) = -pts[i].normal_y;
+      current_pose(2,2) = -pts[i].normal_z;
 
       // set x of tool in direction of motion
-      current_pose.R[0][0] = vels[i].x;
-      current_pose.R[1][0] = vels[i].y;
-      current_pose.R[2][0] = vels[i].z;
+      current_pose(0,0) = vels[i].x;
+      current_pose(1,0) = vels[i].y;
+      current_pose(2,0) = vels[i].z;
 
       // y is the cross product of z with x
-      current_pose.R[0][1] =  current_pose.R[1][2]*current_pose.R[2][0]  -  current_pose.R[1][0]*current_pose.R[2][2];
-      current_pose.R[1][1] = -current_pose.R[0][2]*current_pose.R[2][0] + current_pose.R[0][0]*current_pose.R[2][2];
-      current_pose.R[2][1] =  current_pose.R[0][2]*current_pose.R[1][0]  -  current_pose.R[0][0]*current_pose.R[1][2];
+      current_pose(0,1) =  current_pose(1,2)*current_pose(2,0)  -  current_pose(1,0)*current_pose(2,2);
+      current_pose(1,1) = -current_pose(0,2)*current_pose(2,0) + current_pose(0,0)*current_pose(2,2);
+      current_pose(2,1) =  current_pose(0,2)*current_pose(1,0)  -  current_pose(0,0)*current_pose(1,2);
       poses.push_back(current_pose);
     }
   }
@@ -350,6 +354,30 @@ class surfaceSegmentation{
   void getBoundBoundaryHalfEdges (const Mesh &mesh,
 				  std::vector <Mesh::HalfEdgeIndices>& boundary_he_collection,
 				  const size_t  expected_size = 3)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     {
 
       boundary_he_collection.clear ();
