@@ -111,7 +111,7 @@ main (int argc, char** av)
   // sub-sample cloud randomly to increase processing speed for testing
   pcl::PointCloud<pcl::PointXYZ>::Ptr part_cloud_ptr(new pcl::PointCloud<pcl::PointXYZ>());
   BOOST_FOREACH(pcl::PointXYZ pt, cloud_no_nans->points){
-    int q = rand()%10;
+    int q = 0;//rand()%10;
     if (q ==0){
       if(pt.x !=0.0 && pt.y!=0.0 && pt.z !=0.0)      part_cloud_ptr->push_back(pt);
     }
@@ -223,10 +223,20 @@ main (int argc, char** av)
     color = (color+1)%6;
   } // end for each boundary 
 
+  // set up smoothing for trajectory
+  std::vector<double> filt_coef;
+  filt_coef.push_back(1);
+  filt_coef.push_back(2);
+  filt_coef.push_back(3);
+  filt_coef.push_back(2);
+  filt_coef.push_back(1);
+  SS.setSmoothCoef(filt_coef);	// note, automatically normalizes coefficients for unity gain of filter
+
   //  std::vector<Pose> pose_trajectory;
   std::vector<Eigen::Matrix4f, Eigen::aligned_allocator<Eigen::Matrix4f> > pose_trajectory;
   SS.getBoundaryTrajectory(sorted_boundaries, 0, pose_trajectory);
   pcl::console::print_highlight ("pose_trajectory has %d poses\n", pose_trajectory.size());
+
 
   q=0;
   for(int i=0;i<pose_trajectory.size();i++){

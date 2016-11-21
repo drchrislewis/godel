@@ -22,10 +22,6 @@
 #include <Eigen/Geometry>
 #include <Eigen/StdVector>
 
-struct Pose{
-  double x,y,z;
-  double R[3][3];
-};
 
 template <bool IsManifoldT>
 struct MeshTraits
@@ -270,11 +266,105 @@ class surfaceSegmentation{
       }
       return(sorted_boundaries.size());
     }
+  
+  bool setSmoothCoef(std::vector<double> &coef)
+  {
+    if(coef.size()%2 == 1) {		// smoothing filters must have an odd number of coefficients
+      num_coef_ = coef.size();
+      double sum =0;
+      for(int i=0; i<num_coef_; i++) {
+	coef_.push_back(coef[i]);
+	sum += coef[i];
+      }
+      gain_ = sum;		// set gain to be the sum of the coefficients because we need unity gain
+      return(true);
+    }
+    else{
+      return(false);
+    }
+  }
+
+  void smoothVector(std::vector<double>&x_in, std::vector<double> &x_out)
+  {
+    int n = x_in.size();
+    
+    // initialize the filter using tail of x_in
+    std::vector<double> xv;
+    xv.clear();
+    for(int j=num_coef_-1; j>=0; j--) { 
+      xv.push_back(x_in[n-j-1]);
+    }
+    pcl::console::print_highlight ("num_coef = %d n = %d size of xv =%d\n", num_coef_,n, xv.size());    
+    // cycle through every and apply the filter
+    for(int j=1; j<n-1; j++){
+
+      // shift backwards
+      for(int k=0; k<num_coef_-1; k++){
+	xv[k] = xv[k+1];  
+      }
+	
+      // get next input to filter which is num_coef/2 in front of current point being smoothed
+      int idx = (j+num_coef_/2)%n;
+      //      pcl::console::print_highlight ("idx = %d\n", idx);    
+      xv[num_coef_ - 1] = x_in[idx]; // j'th point
+
+      // apply the filter
+      double sum = 0.0;
+      for(int k=0; k<num_coef_; k++){ 
+	sum += xv[k]*coef_[k];
+      }
+
+      // save point
+      x_out.push_back(sum/gain_); 
+
+    }// end for every point
+  }
+  void smoothPointNormal(std::vector<pcl::PointNormal> &pts_in, std::vector<pcl::PointNormal> &pts_out)
+  {
+    std::vector<double> x_in, x_out, y_in, y_out, z_in, z_out;
+    std::vector<double> nx_in, nx_out, ny_in, ny_out, nz_in, nz_out;
+    for(int i=0;i<pts_in.size(); i++){
+      x_in.push_back(pts_in[i].x);
+      y_in.push_back(pts_in[i].y);
+      z_in.push_back(pts_in[i].z);
+      nx_in.push_back(pts_in[i].normal_x);
+      ny_in.push_back(pts_in[i].normal_y);
+      nz_in.push_back(pts_in[i].normal_z);
+    }
+    pcl::console::print_highlight ("smoothing x\n");    
+    smoothVector(x_in,x_out);
+    pcl::console::print_highlight ("smoothing y\n");    
+    smoothVector(y_in,y_out);
+    pcl::console::print_highlight ("smoothing z\n");    
+    smoothVector(z_in,z_out);
+    pcl::console::print_highlight ("smoothing nx\n");    
+    smoothVector(nx_in,nx_out);
+    pcl::console::print_highlight ("smoothing ny\n");    
+    smoothVector(ny_in,ny_out);
+    pcl::console::print_highlight ("smoothing nz\n");    
+    smoothVector(nz_in,nz_out);
+
+    pcl::console::print_highlight ("normalizing and creating pose trajectory\n");    
+    pts_out.clear();
+    for(int i=0;i<pts_in.size(); i++){
+      pcl::PointNormal pt;
+      pt.x = x_out[i];
+      pt.y = y_out[i];
+      pt.z = z_out[i];
+      double norm = sqrt(nx_out[i]*nx_out[i] + ny_out[i]*ny_out[i] + nz_out[i]*nz_out[i]);
+      pt.normal_x = nx_out[i]/norm;
+      pt.normal_y = ny_out[i]/norm;
+      pt.normal_z = nz_out[i]/norm;
+      pts_out.push_back(pt);
+    }
+
+	  
+  }
   void getBoundaryTrajectory(std::vector<pcl::IndicesPtr> &boundaries, int sb, 
 			     std::vector<Eigen::Matrix4f, Eigen::aligned_allocator<Eigen::Matrix4f> > &poses)
   {
     // grab the position and normal values
-    std::vector<pcl::PointNormal> pts;
+    std::vector<pcl::PointNormal> pts,spts;
     for(int i=0;i<boundaries[sb]->size();i++){
       pcl::PointNormal pt;
       int idx = boundaries[sb]->at(i);
@@ -286,6 +376,7 @@ class surfaceSegmentation{
       pt.normal_z = normals_->at(idx).normal_z;
       pts.push_back(pt);
     }
+    smoothPointNormal(pts, spts);
 
     std::vector<pcl::PointXYZ> vels;
     for(int i=0;i<pts.size();i++){
@@ -354,30 +445,6 @@ class surfaceSegmentation{
   void getBoundBoundaryHalfEdges (const Mesh &mesh,
 				  std::vector <Mesh::HalfEdgeIndices>& boundary_he_collection,
 				  const size_t  expected_size = 3)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     {
 
       boundary_he_collection.clear ();
@@ -472,6 +539,12 @@ class surfaceSegmentation{
       std::vector <pcl::PointIndices> clusters_;
       pcl::PointCloud<pcl::PointXYZ>::Ptr input_cloud_;
       Mesh HEM_;
+
+      // smoothing filter 
+      int num_coef_;
+      std::vector<double> coef_;
+      double gain_;
+
 
 };
 #endif
