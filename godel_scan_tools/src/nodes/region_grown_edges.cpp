@@ -53,6 +53,7 @@
 #include <pcl/visualization/pcl_visualizer.h>
 #include "godel_scan_tools/surface_segmentation.h"
 #include "godel_scan_tools/background_subtraction.h"
+#include "godel_scan_tools/edge_refinement.h"
 
 int
 main (int argc, char** av)
@@ -66,6 +67,8 @@ main (int argc, char** av)
 
   pcl::PointCloud<pcl::PointXYZ>::Ptr bg_cloud_ptr (new pcl::PointCloud<pcl::PointXYZ>());
   pcl::PointCloud<pcl::PointXYZ>::Ptr bg_cloud_nonans(new pcl::PointCloud<pcl::PointXYZ>());
+  pcl::PointCloud<pcl::PointXYZ>::Ptr bg_cloud_nozeros(new pcl::PointCloud<pcl::PointXYZ>());
+  pcl::PointCloud<pcl::PointXYZ>::Ptr hd_cloud(new pcl::PointCloud<pcl::PointXYZ>());
   pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_ptr (new pcl::PointCloud<pcl::PointXYZ>());
   pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_no_nans (new pcl::PointCloud<pcl::PointXYZ>());
   pcl::PointCloud<pcl::Normal>::Ptr cloud_normals (new pcl::PointCloud<pcl::Normal>());
@@ -93,6 +96,8 @@ main (int argc, char** av)
   bg_cloud_ptr->is_dense = false;
   cloud_no_nans->is_dense = false;
   bg_cloud_nonans->is_dense = false;
+  bg_cloud_nozeros->is_dense = false;
+  hd_cloud->is_dense = false;
   std::vector<int> indices, bg_indices;
 
   // remove NANS from both clouds
@@ -110,10 +115,22 @@ main (int argc, char** av)
 
   // sub-sample cloud randomly to increase processing speed for testing
   pcl::PointCloud<pcl::PointXYZ>::Ptr part_cloud_ptr(new pcl::PointCloud<pcl::PointXYZ>());
-  BOOST_FOREACH(pcl::PointXYZ pt, cloud_no_nans->points){
-    int q = rand()%10;
-    if (q ==0){
-      if(pt.x !=0.0 && pt.y!=0.0 && pt.z !=0.0)      part_cloud_ptr->push_back(pt);
+  for(int i=0;i<bg_cloud_nonans->points.size(); i+=rand()%20){
+    pcl::PointXYZ pt = bg_cloud_nonans->points[i];
+    if(pt.x==0.0 && pt.y==0.0 && pt.z==0.0){
+      // do nothing
+    }else{
+      part_cloud_ptr->push_back(pt);
+    }
+  }
+  
+  for(int i=0;i<bg_cloud_nonans->points.size(); i++){
+    pcl::PointXYZ pt = bg_cloud_nonans->points[i];
+    if(pt.x==0.0 && pt.y==0.0 && pt.z==0.0){
+      // do nothing
+    }else{
+      bg_cloud_nozeros->push_back(pt);
+      hd_cloud->push_back(pt);
     }
   }
 
@@ -152,7 +169,6 @@ main (int argc, char** av)
   for(int i=0; i<clusters[selected_segment].indices.size(); i++){
     int index = clusters[selected_segment].indices[i];
     pcl::PointXYZ pt(part_cloud_ptr->points[index]);
-    //    pt.x +=400; // offset cloud to make it easier to show
     segmented_surface_ptr->points.push_back(pt);
   }
   SS.setInputCloud(segmented_surface_ptr);
@@ -194,9 +210,11 @@ main (int argc, char** av)
   pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(colored_cloud_ptr);
   //  viewer->addPointCloud<pcl::PointXYZ> (boundary_cloud_ptr, boundary_color, "boundary cloud");
   viewer->addPointCloud<pcl::PointXYZRGB> (colored_cloud_ptr, rgb, "colored cloud");
+  //./  viewer->addPointCloud<pcl::PointXYZ> (hd_cloud, surface_color, "HD cloud");
   //  viewer->addPointCloud<pcl::PointXYZ> (segmented_surface_ptr, surface_color, "segmented_surface");
   //  viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "segmented_surface");
   viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "colored cloud");
+  //./  viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "HD cloud");
   //  viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "boundary cloud");
   //  viewer->addCoordinateSystem (1.0);
   viewer->initCameraParameters ();
@@ -244,40 +262,54 @@ main (int argc, char** av)
   std::vector<Eigen::Matrix4f, Eigen::aligned_allocator<Eigen::Matrix4f> > pose_trajectory;
   SS.getBoundaryTrajectory(sorted_boundaries, 0, pose_trajectory);
   pcl::console::print_highlight ("pose_trajectory has %d poses\n", pose_trajectory.size());
-
-
+  
+  std::vector<Eigen::Matrix4f, Eigen::aligned_allocator<Eigen::Matrix4f> > refined_pose_trajectory;
+  edgeRefinement EF(bg_cloud_nozeros);
+  EF.refineBoundary(pose_trajectory, refined_pose_trajectory);
+  
   q=0;
   for(int i=0;i<pose_trajectory.size();i++){
     if(q++%20 ==0){
       char line_number[255];
       sprintf(line_number,"%03d",q++);
       std::string ls = std::string("pose_") + std::string(line_number);
-      Eigen::Affine3f pose(pose_trajectory[i].matrix());
+      Eigen::Affine3f pose(refined_pose_trajectory[i].matrix());
       viewer->addCoordinateSystem (.030, pose, 0);
     }
   }
-    
+  color = (color+2)%6;
+  for(int j=0; j<refined_pose_trajectory.size()-1; j++){
+    char line_number[255];
+    sprintf(line_number,"%03d",q++);
+    std::string ls = std::string("rline_") + std::string(line_number);
+    pcl::PointXYZ p1(refined_pose_trajectory[j](0,3),refined_pose_trajectory[j](1,3),refined_pose_trajectory[j](2,3));
+    pcl::PointXYZ p2(refined_pose_trajectory[j+1](0,3),refined_pose_trajectory[j+1](1,3),refined_pose_trajectory[j+1](2,3));
+    viewer->addLine<pcl::PointXYZ> ( p1,p2,ls.c_str());
+    viewer->setShapeRenderingProperties ( pcl::visualization::PCL_VISUALIZER_COLOR, red[color], green[color], blue[color], ls.c_str());
+  }// end for each boundary point
+  
+  
   if (pcl::console::find_switch (argc, av, "-dump"))
-  {
-    pcl::console::print_highlight ("Writing clusters to clusters.dat\n");
-    std::ofstream clusters_file;
-    clusters_file.open ("clusters.dat");
-    for (std::size_t i = 0; i < clusters.size (); ++i)
     {
-      clusters_file << i << "#" << clusters[i].indices.size () << ": ";
-      std::vector<int>::const_iterator pit = clusters[i].indices.begin ();
-      clusters_file << *pit;
-      for (; pit != clusters[i].indices.end (); ++pit)
-        clusters_file << " " << *pit;
-      clusters_file << std::endl;
+      pcl::console::print_highlight ("Writing clusters to clusters.dat\n");
+      std::ofstream clusters_file;
+      clusters_file.open ("clusters.dat");
+      for (std::size_t i = 0; i < clusters.size (); ++i)
+	{
+	  clusters_file << i << "#" << clusters[i].indices.size () << ": ";
+	  std::vector<int>::const_iterator pit = clusters[i].indices.begin ();
+	  clusters_file << *pit;
+	  for (; pit != clusters[i].indices.end (); ++pit)
+	    clusters_file << " " << *pit;
+	  clusters_file << std::endl;
+	}
+      clusters_file.close ();
     }
-    clusters_file.close ();
-  }
-
+  
   while (!viewer->wasStopped ())
-  {
-    viewer->spinOnce (100);
-    boost::this_thread::sleep (boost::posix_time::microseconds (100000));
-  }
+    {
+      viewer->spinOnce (100);
+      boost::this_thread::sleep (boost::posix_time::microseconds (100000));
+    }
   return (0);
 }

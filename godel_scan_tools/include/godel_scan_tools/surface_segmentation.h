@@ -40,8 +40,8 @@ typedef typename Mesh::HalfEdgeIndices                   HalfEdgeIndices;
 typedef typename Mesh::InnerHalfEdgeAroundFaceCirculator IHEAFC;
 
 
-/** @class world_background_subtraction
-      @brief Maintains record of baseline sensor data to provide method to remove them leaving only new objects in the scene
+/** @class surfaceSegmentation
+      @brief tools for segmenting the surface and determining its boundaries
 */
 class surfaceSegmentation{
  public:
@@ -185,18 +185,16 @@ class surfaceSegmentation{
   std::pair<int, int> getNextUnused(std::vector< std::pair<int,int> > used)
   {
     std::pair<int,int> rtn;
-    rtn.first=-1;
+    rtn.first=-1;		/* return less than zero if no more unused points */
     rtn.second=-1;
     for(int i=0;i<used.size();i++){
       if(used[i].first == 0)
 	{
 	  rtn = used[i];
 	  used[i].first = 1;
-	  //	  if(rtn.second ==0)     pcl::console::print_highlight ("returning 0 with i=%d\n",i);
 	  break;
 	}
     }
-
     return(rtn);
   }
   int sortBoundary(pcl::IndicesPtr& boundary_indices, std::vector<pcl::IndicesPtr> &sorted_boundaries)
@@ -212,56 +210,56 @@ class surfaceSegmentation{
       used.reserve(boundary_indices->size());
       for(int i=0;i<boundary_indices->size();i++){
 	std::pair<int,int> p;
-	p.first = 0;
-	p.second = boundary_indices->at(i);
+	p.first = 0;		/* first indicates if the boundary point has been used */
+	p.second = boundary_indices->at(i); /* second indicates the index into the input_cloud_ of that boundary point */
 	used.push_back(p); 
       }
 
       pcl::KdTreeFLANN<pcl::PointXYZ> kdtree(true);// true indicates return sorted radius search results
       kdtree.setInputCloud(input_cloud_, boundary_indices); // use just the boundary points for searching
       
-      std::pair<int, int> n = getNextUnused(used);
-      while( n.first >= 0 ){
+      std::pair<int, int> n = getNextUnused(used);// get first unused point, and mark it used
+      while( n.first >= 0 ){ // getNextUnused returns n.first = -1 when empty.
 	// add first point to the current boundary
 	pcl::IndicesPtr current_boundary(new std::vector<int>);
-	current_boundary->push_back(n.second);
+	current_boundary->push_back(n.second);// push the first point in the boundary onto current_boundary
 	
 	// find all points within small radius of current boundary point
 	std::vector<int> pt_indices;
 	std::vector<float> pt_dist;
 	pcl::PointXYZ spt = input_cloud_->points[n.second];
 	while ( kdtree.radiusSearch (spt, radius_, pt_indices, pt_dist) > 1 ){ // gives index into input_cloud_, 
-	  int q=0;
+	  int q=0;// index through all pt_indices
 	  int add_pt_idx = -1;
 	  do{// find closest unused point in vicinity
 	    int pair_index=0;
-	    for(int i=0;i<used.size();i++){ // for each item in used list 
+	    for(int i=0;i<used.size();i++){ // for each boundary point
 	      if(pt_indices[q] == used[i].second)// look for a match
 		{
-		  if(used[i].first ==0)// see if match is used
+		  if(used[i].first ==0)// check if match is not already used
 		    {
 		      pair_index= i;
 		      used[i].first = 1; // mark it used
 		      add_pt_idx = used[i].second;
 		    }// used
 		  break;
-		}// match indices
-	    }
+		}// end if match found
+	    }// end for each boundary point
 	    q++;
-	  }while (q<pt_indices.size() && add_pt_idx == -1); // is there an unused point in the vicinity of the current spt?
-	  if(add_pt_idx !=-1){
-	    current_boundary->push_back(add_pt_idx);
-	    spt = input_cloud_->points[add_pt_idx]; // search near the new point next time
+	  }while (q<pt_indices.size() && add_pt_idx == -1); // until point found in the vicinity of the last added boundary point, or none left
+	  if(add_pt_idx !=-1){// no more points found in the vicinity
+	    current_boundary->push_back(add_pt_idx); // add point to current boundary
+	    spt = input_cloud_->points[add_pt_idx]; // set new search point to the last point found
 	  } // end if ad_pt_idx was found
-	  else			
+	  else // no more unused points found in the vicinity of the last boundary point
 	    {
 	      //	      pcl::console::print_highlight ("adding boundary with %d points\n",current_boundary->size());
-	      break;		/* end of boundary */
+	      break;		/* end of boundary, break out and add current boundary to vector of boundaries*/
 	    }
 	}// there are points within the radius
-	sorted_boundaries.push_back(current_boundary);
-	n = getNextUnused(used);
-      }
+	sorted_boundaries.push_back(current_boundary);// add current boundary to vector of boundaries
+	n = getNextUnused(used);// get next unused point
+      }// end while more unused points
       return(sorted_boundaries.size());
     }
   void setSearchRadius(double radius)
